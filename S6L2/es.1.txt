@@ -1,0 +1,4 @@
+La lista di liste riportate potrebbe rappresentare una matrice. 
+Ogni lista interna rappresenta una riga della matrice e i valori contenuti all'interno delle liste rappresentano le colonne della matrice.
+
+Per accedere ad un elemento in particolare, si utilizzano le parentesi quadre [] per indicizzare le liste

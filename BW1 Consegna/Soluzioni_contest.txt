@@ -1,0 +1,131 @@
+#1. Quali prodotti vendono meglio in determinati periodi dell’anno?
+SELECT CASE
+        WHEN Month(datatransazione) IN ( 9,10, 11 ) THEN'Autunno'
+		WHEN Month(datatransazione) IN ( 12, 1, 2) THEN 'Inverno'
+		WHEN Month(datatransazione) IN ( 3, 4, 5) THEN 'Primavera'
+		WHEN Month(datatransazione) IN ( 6,7,8) THEN 'Estate'
+       end                                     AS Stagioni,
+       p.ProdottoID as ProdottoId,
+       Sum(quantitaacquistata)                        AS TotaleQuantita,
+       Round(Sum(p.prezzo * t.quantitaacquistata), 0) AS TotaleSpeso
+       FROM   transazioni AS t
+       INNER JOIN prodotti AS p
+               ON t.prodottoid = p.prodottoid
+#WHERE  p.categoria LIKE '%abbigliamento%'
+GROUP  BY Stagioni , p.ProdottoID
+ORDER  BY totalespeso DESC;
+
+#2. Selezione i primi 3 clienti che hanno il prezzo medio di acquisto più alto in ogni categoria di prodotto.
+select c.ClienteID, avg(ImportoTransazione) as MediaImp, p.Categoria
+from clienti c
+join transazioni t
+on t.ClienteID=c.ClienteID
+join prodotti p
+on p.ProdottoID=t.ProdottoID
+group by c.clienteID, p.Categoria
+Order by MediaImp DESC
+limit 3;
+
+#3. Numero di prodotti con una quantità disponibile inferiore alla media.
+select count(p.prodottoID) as qntprodotto
+from prodotti p
+where QuantitaDisponibile < (select avg(QuantitaDisponibile) from prodotti);
+
+#4. Media delle recensioni dei clienti il cui tempo di elaborazione dell'ordine è inferiore a 30gg 
+SELECT AVG(r.rating) as MediaRecensioni
+from ratings_dataset r
+join transazioni t
+on t.clienteid = r.customerid
+where datediff(t.dataspedizione, t.datatransazione) < 30;
+
+#5. Valutazione del tempo in anni in cui viene gestita una spedizione con visualizzazione di "Più di un anno" o "Meno di un anno" in una colonna calcolata.
+SELECT S.SpedizioneID, S.DataSpedizione, S.StatusConsegna, 
+CASE WHEN DATEDIFF(S.DataSpedizione, T.DataTransazione) > 365 THEN 'Più di un anno' ELSE 'Meno di un anno' END AS TempoGestioneOrdini 
+FROM spedizioni AS S 
+JOIN transazioni AS T ON S.spedizioneid = T.spedizioneid 
+JOIN prodotti AS P ON T.prodottoid = P.prodottoid;
+
+#6. Totale delle disponibilità in magazzino dei prodotti divisi per categoria
+SELECT categoria, sum(quantitadisponibile) 
+from prodotti
+Group by categoria;
+
+#7. Si vuole stampare Nome del cliente, Importo transazione (prezzo * quantità),Nome Prodotto e Rating MEDIO del prodotto. Aggiungere colonna OUTPUT che avrà i seguenti valori: SE la transazione supera il valore medio di tutte le transazioni dell’anno stampare “Sopra La Media” altrimenti “Sotto la media”
+SELECT cl.NomeCliente, t.ImportoTransazione, pr.NomeProdotto, 
+AVG(rd.Rating) AS MediaRating, 
+CASE WHEN t.ImportoTransazione > AVG(t.ImportoTransazione) OVER() THEN 'Sopra La Media' ELSE 'Sotto la media' END AS OUTPUT 
+FROM transazioni t 
+JOIN clienti cl ON t.ClienteID = cl.ClienteID 
+JOIN prodotti pr ON t.ProdottoID = pr.ProdottoID 
+JOIN ratings_dataset rd ON t.ProdottoID = rd.ProductID 
+GROUP BY cl.NomeCliente, t.ImportoTransazione, pr.NomeProdotto;
+
+#8. Trovare tutti i clienti che si sono registrati nel mese con più profitto
+WITH mesiprofitto
+     AS (SELECT Month(datatransazione)  AS NumeroMese,
+                Year(datatransazione)   AS Anno,
+                Sum(importotransazione) AS Profitto
+         FROM   transazioni
+         GROUP  BY numeromese,
+                   anno),
+     subquery
+     AS (SELECT anno,
+                numeromese,
+                profitto
+         FROM   mesiprofitto
+         WHERE  profitto = (SELECT Max(profitto)
+                            FROM   mesiprofitto))
+SELECT c.*
+FROM   clienti AS c
+WHERE  Month(c.dataregistrazione) = (SELECT numeromese
+                                     FROM   subquery);
+
+
+#10. Trova le informazioni dettagliate sulla spedizione, inclusi il cliente, il prodotto, la quantità acquistata e l'importo totale per ciascuna spedizione
+SELECT s.SpedizioneID, s.MetodoSpedizione, s.DataSpedizione, s.StatusConsegna, c.NomeCliente, c.Email, p.NomeProdotto, t.QuantitaAcquistata, t.ImportoTransazione 
+FROM spedizioni s 
+JOIN transazioni t ON s.SpedizioneID = t.SpedizioneID
+JOIN prodotti p ON t.ProdottoID = p.ProdottoID 
+JOIN clienti c ON t.ClienteID = c.ClienteID;
+
+
+#11. Considerando i prodotti della Categoria Abbigliamento nel periodo Primavera-Estate e Autunno-Inverno, trova la quantità totale di prodotti acquistati e totale speso, arrotondando laddove necessario (Suggerimento/N.B: il totale speso, non il totale transazione)
+SELECT CASE
+         WHEN Month(datatransazione) IN ( 10, 11, 12, 1, 2 ) THEN
+         'Autunno-Inverno'
+         WHEN Month(datatransazione) IN ( 3, 4, 5, 6,
+                                          7, 8, 9 ) THEN 'Primavera-Estate'
+       end                                            AS Periodo,
+       p. categoria                                   AS Categoria,
+       Sum(quantitaacquistata)                        AS TotaleQuantita,
+       Round(Sum(p.prezzo * t.quantitaacquistata), 0) AS TotaleSpeso
+FROM   transazioni AS t
+       INNER JOIN prodotti AS p
+               ON t.prodottoid = p.prodottoid
+WHERE  p.categoria LIKE '%abbigliamento%'
+GROUP  BY periodo,
+          p.categoria
+ORDER  BY totalespeso DESC;
+
+#12. Trova il nome del prodotto, la data di transazione e la data di spedizione degli ultimi dieci prodotti acquistati. Elenca anche quanti giorni siano trascorsi dalla data di transazione a quella di spedizione
+SELECT P.nomeprodotto,
+       Date_format(T.datatransazione, '%Y-%m-%d')         AS DataTransazione,
+       Date_format(S.dataspedizione, '%Y-%m-%d')          AS DataSpedizione,
+       Abs(Datediff(T.datatransazione, S.dataspedizione)) AS GiorniPassati
+FROM   spedizioni AS S
+       INNER JOIN transazioni AS T
+               ON S.spedizioneid = T.spedizioneid
+       INNER JOIN prodotti AS P
+               ON T.prodottoid = P.prodottoid
+WHERE  S.statusconsegna <> 'consegnato'
+       AND S.statusconsegna = 'in consegna'
+ORDER  BY T.datatransazione DESC
+LIMIT  10;
+
+#14. Mostra come sono distribuite le transazioni sui giorni della settimana. Mostra sia il numero di transazioni per ogni giorno della settimana, che la percentuale divisa per giorno della settimana
+select WEEKDAY(Datatransazione), count(transazioneid), (COUNT(transazioneid) ) / SUM(COUNT(transazioneid)) over ()
+from transazioni
+group by WEEKDAY(Datatransazione) 
+;
+
+
